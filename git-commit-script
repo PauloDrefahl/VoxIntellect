@@ -1,16 +1,15 @@
 import os
 import subprocess
 
-# Configuration 2
-
+# Configuration
 REPO_PATH = "/Users/paulodrefahl/Desktop/Projects/VoxIntellect"  # Replace with the path to your GitHub repository
 COMMIT_MESSAGE = "Vox 1.2v"  # Set your commit message
 COMMIT_DATE = "2025-02-25T08:00:00"  # Format: YYYY-MM-DDTHH:MM:SS
 BRANCH_NAME = "main"  # Replace with your branch name if different
 
-def run_command(command, cwd=None):
+def run_command(command, cwd=None, env=None):
     """Run a shell command and capture the output."""
-    result = subprocess.run(command, cwd=cwd, text=True, capture_output=True)
+    result = subprocess.run(command, cwd=cwd, env=env, text=True, capture_output=True)
     if result.returncode != 0:
         print(f"Error: {result.stderr.strip()}")
         exit(1)
@@ -22,22 +21,24 @@ def main():
         print(f"Error: Repository path '{REPO_PATH}' does not exist.")
         return
     os.chdir(REPO_PATH)
-    
+
     # Add changes
     print("Adding changes...")
-    run_command(["git", "add", "."])
-    
+    run_command(["git", "add", "."], cwd=REPO_PATH)
+
     # Commit changes with a custom date
     print("Committing changes...")
+    env = os.environ.copy()
+    env["GIT_COMMITTER_DATE"] = COMMIT_DATE
     run_command([
-        "git", "-c", f"user.date={COMMIT_DATE}", "commit", "--date", COMMIT_DATE, "-m", COMMIT_MESSAGE
-    ])
-    
+        "git", "commit", "--date", COMMIT_DATE, "-m", COMMIT_MESSAGE
+    ], cwd=REPO_PATH, env=env)
+
     # Push to GitHub
     print("Pushing changes to GitHub...")
-    run_command(["git", "push", "origin", BRANCH_NAME])
-    
-    print("Changes successfully committed and pushed to GitHub.")
+    run_command(["git", "push", "origin", BRANCH_NAME], cwd=REPO_PATH)
+
+    print("✅ Changes successfully committed and pushed to GitHub.")
 
 if __name__ == "__main__":
     main()
