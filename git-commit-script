@@ -2,10 +2,10 @@ import os
 import subprocess
 
 # Configuration
-REPO_PATH = "/Users/paulodrefahl/Desktop/Projects/VoxIntellect"  # Replace with the path to your GitHub repository
-COMMIT_MESSAGE = "Vox 1.2v"  # Set your commit message
+REPO_PATH = "/Users/paulodrefahl/Desktop/Projects/VoxIntellect"  # Replace with your GitHub repo path
+COMMIT_MESSAGE = "Vox 1.2v"  # Commit message
 COMMIT_DATE = "2025-02-25T08:00:00"  # Format: YYYY-MM-DDTHH:MM:SS
-BRANCH_NAME = "main"  # Replace with your branch name if different
+BRANCH_NAME = "main"  # Replace if your branch is different
 
 def run_command(command, cwd=None, env=None):
     """Run a shell command and capture the output."""
@@ -16,7 +16,7 @@ def run_command(command, cwd=None, env=None):
     return result.stdout.strip()
 
 def main():
-    # Change to the repository directory
+    # Ensure repository path exists
     if not os.path.exists(REPO_PATH):
         print(f"Error: Repository path '{REPO_PATH}' does not exist.")
         return
@@ -26,6 +26,12 @@ def main():
     print("Adding changes...")
     run_command(["git", "add", "."], cwd=REPO_PATH)
 
+    # Check if there is anything to commit
+    status_output = run_command(["git", "status", "--porcelain"], cwd=REPO_PATH)
+    if not status_output:
+        print("No changes to commit.")
+        return
+
     # Commit changes with a custom date
     print("Committing changes...")
     env = os.environ.copy()
@@ -34,7 +40,11 @@ def main():
         "git", "commit", "--date", COMMIT_DATE, "-m", COMMIT_MESSAGE
     ], cwd=REPO_PATH, env=env)
 
-    # Push to GitHub
+    # Pull latest remote changes before pushing
+    print("Pulling latest changes from GitHub...")
+    run_command(["git", "pull", "--rebase", "origin", BRANCH_NAME], cwd=REPO_PATH)
+
+    # Push changes
     print("Pushing changes to GitHub...")
     run_command(["git", "push", "origin", BRANCH_NAME], cwd=REPO_PATH)
 
