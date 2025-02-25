@@ -7,6 +7,8 @@ import soundfile as sf
 from TTS.api import TTS
 import threading
 
+model = whisper.load_model("tiny")
+
 # ------------------------------------------------------------------------------
 # Configurations
 # ------------------------------------------------------------------------------
@@ -60,6 +62,7 @@ def record_audio():
         wf.setnchannels(CHANNELS)
         wf.setsampwidth(2)
         wf.setframerate(SAMPLE_RATE)
+        
         wf.writeframes((audio_data * 32767).astype(np.int16).tobytes())
 
     print(f"✅ Audio saved as {AUDIO_FILE}")
@@ -67,7 +70,6 @@ def record_audio():
 
 def transcribe_audio():
     print("📝 Transcribing audio with Whisper...")
-    model = whisper.load_model("tiny")
     result = model.transcribe(AUDIO_FILE)
     text = result["text"]
     print(f"🎙 Transcription: {text}")
@@ -78,12 +80,12 @@ def ask_llama(question):
     system_instruction = (
         "You are Albert Einstein, a brilliant theoretical physicist and mathematician. "
         "When explaining math or other concepts, avoid using any math symbols or special characters. "
-        "Use only words and numbers in plain text. Keep your answers short. "
+        "Use only words and numbers in plain text. Keep your answers short, no more than a paragraph. "
         "If you need to do a calculation, provide only the final numeric result "
         "or just the necessary concept. Do not include detailed symbolic math steps."
     )
     response = ollama.chat(
-        model="llama3",
+        model="llama3.2",
         messages=[
             {"role": "system", "content": system_instruction},
             {"role": "user", "content": question}
@@ -103,6 +105,7 @@ def speak_text(text):
     data, samplerate = sf.read("response.wav")
     sd.play(data, samplerate)
     sd.wait()
+    
 
 # ------------------------------------------------------------------------------
 # Main
