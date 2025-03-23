@@ -5,61 +5,67 @@ import whisper
 import ollama
 import soundfile as sf
 from TTS.api import TTS
+import threading
 
 # ------------------------------------------------------------------------------
 # Configurations
 # ------------------------------------------------------------------------------
 SAMPLE_RATE = 44100  # CD-quality
 CHANNELS = 1
-DURATION_LIMIT = 60  # Max recording duration (seconds)
 AUDIO_FILE = "recorded_audio.wav"
+DURATION_LIMIT = 60  # Max duration safeguard in seconds 
 
 # ------------------------------------------------------------------------------
-# Load the multi-speaker model *once* at the top to avoid re-initializing.
+# Load the TTS model once
 # ------------------------------------------------------------------------------
 tts = TTS(model_name="tts_models/en/vctk/vits", progress_bar=False, gpu=False)
-
-# If you're curious which speakers exist, uncomment to print them:
-# print("Available speakers:", tts.speakers)
-# Example output might be: ['p225', 'p226', 'p227', 'p228', ...]
-
-# Choose a male speaker from the list (often "p228" is male).
-MALE_SPEAKER = "p228"
+MALE_SPEAKER = "p228"  # Example male voice
 
 # ------------------------------------------------------------------------------
 # Functions
 # ------------------------------------------------------------------------------
 def record_audio():
-    """Records audio until the user presses Enter."""
-    print("🎤 Recording... Press Enter to stop.")
-    frames = []
+    """Records audio when user presses Enter to start and Enter again to stop."""
+    print("🎤 Press Enter to start recording or type 'q' then Enter to quit.")
+    start_input = input().strip().lower()
+    if start_input == 'q':
+        return False  # Signal to quit
 
-    def callback(indata, frame_count, time_info, status):
+    print("🎙 Recording... Press Enter to stop.")
+
+    frames = []
+    recording = True
+
+    def callback(indata, frames_count, time_info, status):
         if status:
             print(status)
         frames.append(indata.copy())
 
-    # Open input stream
-    with sd.InputStream(samplerate=SAMPLE_RATE, channels=CHANNELS, callback=callback):
-        input()  # Wait for user input (press Enter to stop)
-    
-    print("🛑 Recording stopped.")
+    def wait_for_stop():
+        nonlocal recording
+        input()
+        recording = False
 
-    # Convert recorded data to NumPy array
+    stop_thread = threading.Thread(target=wait_for_stop)
+    stop_thread.start()
+
+    with sd.InputStream(samplerate=SAMPLE_RATE, channels=CHANNELS, callback=callback):
+        while recording:
+            sd.sleep(100)
+
     audio_data = np.concatenate(frames, axis=0)
 
-    # Save as a WAV file
+    # Save to WAV
     with wave.open(AUDIO_FILE, "wb") as wf:
         wf.setnchannels(CHANNELS)
-        wf.setsampwidth(2)  # 16-bit PCM
+        wf.setsampwidth(2)
         wf.setframerate(SAMPLE_RATE)
         wf.writeframes((audio_data * 32767).astype(np.int16).tobytes())
 
     print(f"✅ Audio saved as {AUDIO_FILE}")
-
+    return True
 
 def transcribe_audio():
-    """Uses Whisper to transcribe the recorded audio."""
     print("📝 Transcribing audio with Whisper...")
     model = whisper.load_model("tiny")
     result = model.transcribe(AUDIO_FILE)
@@ -67,22 +73,15 @@ def transcribe_audio():
     print(f"🎙 Transcription: {text}")
     return text
 
-
 def ask_llama(question):
-    """Sends the transcribed question to LLaMA (Ollama) and gets a response."""
-
     print("🤖 Processing with LLaMA...")
-
     system_instruction = (
-        "You are Sir Isaac Newton, a brilliant mathematician. "
+        "You are Albert Einstein, a brilliant theoretical physicist and mathematician. "
         "When explaining math or other concepts, avoid using any math symbols or special characters. "
-        "Use only words and numbers in plain text. "
-        "Keep your answers short. "
+        "Use only words and numbers in plain text. Keep your answers short. "
         "If you need to do a calculation, provide only the final numeric result "
         "or just the necessary concept. Do not include detailed symbolic math steps."
     )
-
-    # We now supply two messages: one “system” style and one from the "user".
     response = ollama.chat(
         model="llama3",
         messages=[
@@ -90,37 +89,30 @@ def ask_llama(question):
             {"role": "user", "content": question}
         ]
     )
-    
     answer = response["message"]["content"]
     print(f"🧠 LLaMA's Explanation: {answer}")
     return answer
 
-
 def speak_text(text):
-    """
-    Speaks the text using Coqui TTS (multi-speaker VITS).
-    We'll pick a male speaker and speed up the speech slightly.
-    """
-    # Example: speed=1.2 => ~20% faster. If this doesn't work, try duration_factor=0.85
     tts.tts_to_file(
         text=text,
         file_path="response.wav",
         speaker=MALE_SPEAKER,
-        speed=1.8  # <--- For a slightly faster rate
-        # or: duration_factor=0.85
+        speed=1.8
     )
-
-    # Play the generated WAV
     data, samplerate = sf.read("response.wav")
     sd.play(data, samplerate)
     sd.wait()
 
-
 # ------------------------------------------------------------------------------
-# Main Program
+# Main
 # ------------------------------------------------------------------------------
 if __name__ == "__main__":
-    record_audio()
-    question_text = transcribe_audio()
-    explanation = ask_llama(question_text)
-    speak_text(explanation)
+    while True:
+        proceed = record_audio()
+        if not proceed:
+            print("👋 Exiting. Goodbye!")
+            break
+        question = transcribe_audio()
+        reply = ask_llama(question)
+        speak_text(reply)
