@@ -1,38 +1,49 @@
 import sounddevice as sd
 import numpy as np
 import wave
-import whisper
-import ollama
 import soundfile as sf
-from TTS.api import TTS
 import threading
+from faster_whisper import WhisperModel
+from TTS.api import TTS
+from llama_cpp import Llama
 
 # ------------------------------------------------------------------------------
 # Configurations
 # ------------------------------------------------------------------------------
-SAMPLE_RATE = 44100  # CD-quality
+SAMPLE_RATE = 16000
 CHANNELS = 1
 AUDIO_FILE = "recorded_audio.wav"
-DURATION_LIMIT = 60  # Max duration safeguard in seconds 
+DURATION_LIMIT = 60
+MODEL_PATH = "/home/paulodrefahl/Desktop/llama.cpp/models/phi-2.gguf"
 
 # ------------------------------------------------------------------------------
-# Load the TTS model once
+# Load Models Once
 # ------------------------------------------------------------------------------
-tts = TTS(model_name="tts_models/en/vctk/vits", progress_bar=False, gpu=False)
-MALE_SPEAKER = "p228"  # Example male voice
+# Whisper on GPU
+whisper_model = WhisperModel("tiny", compute_type="float16", device="cpu")
+
+# TTS on GPU
+tts = TTS(model_name="tts_models/en/ljspeech/tacotron2-DDC", progress_bar=False)
+tts.to("cuda")
+
+# LLaMA.cpp model using GPU
+llm = Llama(
+    model_path=MODEL_PATH,
+    n_ctx=1024,
+    n_gpu_layers=-1,
+    verbose=False
+)
 
 # ------------------------------------------------------------------------------
 # Functions
 # ------------------------------------------------------------------------------
 def record_audio():
-    """Records audio when user presses Enter to start and Enter again to stop."""
     print("🎤 Press Enter to start recording or type 'q' then Enter to quit.")
     start_input = input().strip().lower()
     if start_input == 'q':
-        return False  # Signal to quit
+        return False
 
     print("🎙 Recording... Press Enter to stop.")
-
     frames = []
     recording = True
 
@@ -55,7 +66,6 @@ def record_audio():
 
     audio_data = np.concatenate(frames, axis=0)
 
-    # Save to WAV
     with wave.open(AUDIO_FILE, "wb") as wf:
         wf.setnchannels(CHANNELS)
         wf.setsampwidth(2)
@@ -66,38 +76,27 @@ def record_audio():
     return True
 
 def transcribe_audio():
-    print("📝 Transcribing audio with Whisper...")
-    model = whisper.load_model("tiny")
-    result = model.transcribe(AUDIO_FILE)
-    text = result["text"]
+    print("📝 Transcribing audio with Faster-Whisper...")
+    segments, _ = whisper_model.transcribe(AUDIO_FILE)
+    text = ""
+    for segment in segments:
+        text += segment.text
     print(f"🎙 Transcription: {text}")
     return text
 
 def ask_llama(question):
-    print("🤖 Processing with LLaMA...")
-    system_instruction = (
-        "You are Albert Einstein, a brilliant theoretical physicist and mathematician. "
-        "When explaining math or other concepts, avoid using any math symbols or special characters. "
-        "Use only words and numbers in plain text. Keep your answers short. "
-        "If you need to do a calculation, provide only the final numeric result "
-        "or just the necessary concept. Do not include detailed symbolic math steps."
-    )
-    response = ollama.chat(
-        model="llama3",
-        messages=[
-            {"role": "system", "content": system_instruction},
-            {"role": "user", "content": question}
-        ]
-    )
-    answer = response["message"]["content"]
-    print(f"🧠 LLaMA's Explanation: {answer}")
+    print("🤖 Answering with GPU-powered LLaMA.cpp...")
+    prompt = f"You are Albert Einstein. Explain this in simple terms: {question}"
+    response = llm(prompt, max_tokens=150)
+    answer = response["choices"][0]["text"].strip()
+    print(f"🧠 LLaMA's Answer: {answer}")
     return answer
 
 def speak_text(text):
     tts.tts_to_file(
         text=text,
         file_path="response.wav",
-        speaker=MALE_SPEAKER,
+        speaker=None,
         speed=1.8
     )
     data, samplerate = sf.read("response.wav")
@@ -105,7 +104,7 @@ def speak_text(text):
     sd.wait()
 
 # ------------------------------------------------------------------------------
-# Main
+# Main Loop
 # ------------------------------------------------------------------------------
 if __name__ == "__main__":
     while True:
