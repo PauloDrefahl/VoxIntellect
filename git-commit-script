@@ -3,7 +3,7 @@ import subprocess
 
 # Configuration
 REPO_PATH = "/Users/paulodrefahl/Desktop/Projects/VoxIntellect"  # Replace with your GitHub repo path
-COMMIT_MESSAGE = "Vox 1.55v"  # Commit message
+COMMIT_MESSAGE = "Vox 1.6v"  # Commit message
 COMMIT_DATE = "2025-04-13T08:00:00"  # Format: YYYY-MM-DDTHH:MM:SS
 BRANCH_NAME = "main"  # Replace if your branch is different
 
